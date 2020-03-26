@@ -203,7 +203,9 @@ CommandParser::CmdParser.new(ARGV) do
                 service_template = OpenNebula::ServiceTemplate
                                    .new_with_id(args[0],
                                                 OpenNebula::Client.new)
-                service_template.info
+                rc = service_template.info
+
+                break rc if OpenNebula.is_error?(rc)
 
                 body = JSON.parse(service_template['/DOCUMENT/TEMPLATE/BODY'])
 
@@ -233,7 +235,13 @@ CommandParser::CmdParser.new(ARGV) do
             end
         end
 
-        rc
+        if (rc.is_a? Array) && rc[0] != 0
+            puts rc[1]
+        elsif OpenNebula.is_error?(rc)
+            puts rc.message
+        end
+
+        0
     end
 
     ###

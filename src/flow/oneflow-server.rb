@@ -302,6 +302,21 @@ post '/service/:id/action' do
     status 204
 end
 
+post '/service/:id/bulk' do
+    action = JSON.parse(request.body.read)['action']
+
+    perform = action['perform']
+    args    = action['params']['args']
+
+    rc = lcm.bulk_action(@client, params[:id], perform, args)
+
+    if OpenNebula.is_error?(rc)
+        return internal_error(rc.message, one_error_to_http(rc.errno))
+    end
+
+    status 204
+end
+
 # put '/service/:id/role/:name' do
 #     service_pool = nil # OpenNebula::ServicePool.new(@client)
 #

@@ -174,6 +174,11 @@ module OpenNebula
             true
         end
 
+        # Returns true if the service is RUNNING
+        def running?
+            state == Service::STATE['RUNNING']
+        end
+
         # Returns true if all the nodes are correctly deployed
         # @return [true, false] true if all the nodes are correctly deployed
         def all_roles_running?

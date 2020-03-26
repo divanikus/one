@@ -28,6 +28,28 @@ class ServiceLCM
 
     LOG_COMP = 'LCM'
 
+    BULK_ACTIONS = {
+        'snapshot_create' => {
+            :method => 'snapshot_create'
+        },
+        'snapshot_delete' => {
+            :method => 'snapshot_delete',
+            :proc   => lambda do |arg|
+                arg.map! do |a|
+                    a.to_i
+                end
+            end
+        },
+        'snapshot_revert' => {
+            :method => 'snapshot_revert',
+            :proc   => lambda do |arg|
+                arg.map! do |a|
+                    a.to_i
+                end
+            end
+        }
+    }
+
     ACTIONS = {
         # Callbacks
         'DEPLOY_CB'            => :deploy_cb,
@@ -172,6 +194,65 @@ class ServiceLCM
             end
 
             role.batch_action(action, period, number)
+        end
+
+        Log.error LOG_COMP, rc.message if OpenNebula.is_error?(rc)
+
+        rc
+    end
+
+    # Execute action in all service VMs
+    #
+    # @param client     [OpenNebula::Client] Client executing action
+    # @param service_id [Integer]            Service ID
+    # @param action     [String]             Action to perform
+    # @param args       [Array]              Parameters needed by the action
+    def bulk_action(client, service_id, action, args)
+        rc = @srv_pool.get(service_id, client) do |service|
+            unless service.running?
+                break OpenNebula::Error.new(
+                    'Bulk action cannot be undeployed in state: ' \
+                    "#{service.state_str}"
+                )
+            end
+
+            action = action.downcase.strip
+
+            if BULK_ACTIONS[action].nil?
+                break OpenNebula::Error.new(
+                    "Bulk action '#{action}' not supported"
+                )
+            end
+
+            method         = BULK_ACTIONS[action][:method]
+            transformation = BULK_ACTIONS[action][:proc]
+
+            # apply needed transformation to given args
+            transformation.call(args) if transformation
+
+            Log.info LOG_COMP,
+                     "Executing bulk action in service #{service_id}"
+
+            service.roles.each do |name, role|
+                Log.info LOG_COMP, "Executing '#{method}' in role #{name}"
+
+                role.nodes_ids.each do |id|
+                    Log.info LOG_COMP, "Executing '#{method}' in VM #{id}"
+
+                    vm = OpenNebula::VirtualMachine.new_with_id(id, client)
+                    rc = vm.info
+
+                    break rc if OpenNebula.is_error?(rc)
+
+                    rc = vm.send(method, *args)
+
+                    next unless OpenNebula.is_error?(rc)
+
+                    Log.error LOG_COMP,
+                              "'#{method}' failed for VM " \
+                              "#{id}: #{rc.message}"
+                end
+            end
         end
 
         Log.error LOG_COMP, rc.message if OpenNebula.is_error?(rc)

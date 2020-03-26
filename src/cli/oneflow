@@ -44,6 +44,8 @@ USER_AGENT = 'CLI'
 # Base Path representing the resource to be used in the requests
 RESOURCE_PATH = '/service'
 
+BULK_ACTIONS = %w[snapshot_create snapshot_delete snapshot_revert]
+
 CommandParser::CmdParser.new(ARGV) do
     usage '`oneflow` <command> [<args>] [<options>]'
     version OpenNebulaHelper::ONE_VERSION
@@ -275,7 +277,7 @@ CommandParser::CmdParser.new(ARGV) do
     ###
 
     action_desc = <<-EOT.unindent
-        Perform an action on all the Virtual Machines of a given role.
+        Perform an schedule action on all the Virtual Machines of a given role.
         Actions supported: #{Role::SCHEDULE_ACTIONS.join(',')}
     EOT
 
@@ -295,6 +297,25 @@ CommandParser::CmdParser.new(ARGV) do
 
             client.post("#{RESOURCE_PATH}/#{service_id}/role/#{args[1]}/action",
                         json)
+        end
+    end
+
+    ###
+
+    bulk_desc = <<-EOT.unindent
+        Perform an action on all the Virtual Machines of a given service.
+        Actions supported: #{BULK_ACTIONS.join(', ')}
+    EOT
+
+    command :bulk, bulk_desc, :service_id, :action, [:params, nil] do
+        Service.perform_action(args[0]) do |service_id|
+            params = {}
+            params[:args] = args[2].split(',')
+
+            json   = Service.build_json_action(args[1], params)
+            client = helper.client(options)
+
+            client.post("#{RESOURCE_PATH}/#{service_id}/bulk", json)
         end
     end
 end
